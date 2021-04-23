@@ -9,7 +9,10 @@ import {
   Box,
   Button,
   TextField,
+  IconButton,
 } from "@material-ui/core";
+import { Videocam, VideocamOff, Mic, MicOff } from "@material-ui/icons";
+
 import "webrtc-adapter";
 
 import { PEER } from "./config/peer";
@@ -81,10 +84,13 @@ const usePeer = () => {
 
   const [joinedUsers, setJoinedUsers] = React.useState([]);
 
-  const handleConnectToMediaStream = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-    });
+  const [deviceConstraints, setDeviceConstraints] = React.useState({
+    video: true,
+    audio: !true,
+  });
+
+  const handleConnectToMediaStream = async (constraints) => {
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
     setLocaleStream(stream);
 
@@ -183,10 +189,26 @@ const usePeer = () => {
 
   const handleChangeSenderName = (event) => setSenderName(event.target.value);
 
+  const handleToggleDevicesStatus = (deviceType) => () =>
+    setDeviceConstraints((currentDevicesContraints) => {
+      const newDevicesContraints = {
+        ...currentDevicesContraints,
+        [deviceType]: !currentDevicesContraints[deviceType],
+      };
+
+      localeStream.getTracks().forEach((track) => {
+        if (track.kind === deviceType) {
+          track.enabled = !track.enabled;
+        }
+      });
+
+      return newDevicesContraints;
+    });
+
   React.useEffect(() => {
     // handleCInitPeer();
     handleInitListenersForPeer();
-    handleConnectToMediaStream();
+    handleConnectToMediaStream(deviceConstraints);
     // handleConnectToDevices();
     // handleInitListenersForDevices();
 
@@ -239,6 +261,10 @@ const usePeer = () => {
     videoRef,
     remoteVideoRef,
 
+    isVideoOn: deviceConstraints.video,
+    isAudioOn: deviceConstraints.audio,
+    handleToggleDevicesStatus,
+
     localeStream,
     videoDevices,
     microphoneDevices,
@@ -254,7 +280,7 @@ export const App = () => {
 
   return (
     <Box p={2}>
-      <Grid container spacing={2}>
+      <Grid container spacing={2} justify="center">
         <Grid item xs={6}>
           <video
             autoPlay
@@ -268,6 +294,26 @@ export const App = () => {
             ref={peer.remoteVideoRef}
             style={{ width: "100%", height: "100%" }}
           />
+        </Grid>
+        <Grid item xs={12} container spacing={2} justify="center">
+          <Grid item xs="auto">
+            <IconButton onClick={peer.handleToggleDevicesStatus("video")}>
+              {peer.isVideoOn ? (
+                <Videocam color="primary" />
+              ) : (
+                <VideocamOff color="error" />
+              )}
+            </IconButton>
+          </Grid>
+          <Grid item xs="auto">
+            <IconButton onClick={peer.handleToggleDevicesStatus("audio")}>
+              {peer.isAudioOn ? (
+                <Mic color="primary" />
+              ) : (
+                <MicOff color="error" />
+              )}
+            </IconButton>
+          </Grid>
         </Grid>
         <Grid item xs={12}>
           <TextField
