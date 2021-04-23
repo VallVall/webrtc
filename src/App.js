@@ -26,31 +26,24 @@ const buttonProps = {
   color: "primary",
 };
 
-const CustomSelect = ({ options, label }) => {
-  const [value, setValue] = React.useState("");
+const CustomSelect = ({ value, options, type, onChangeDevice }) => {
+  const handleChangeDevice = (event) => {
+    if (type === "volume") {
+      onChangeDevice(event.target.value);
 
-  React.useEffect(() => {
-    if (options.length === 1) {
-      const [{ deviceId }] = options;
-
-      setValue(deviceId);
       return;
     }
 
-    const [{ deviceId }] = options.filter(
-      ({ deviceId }) => deviceId === "default"
-    );
-
-    setValue(deviceId);
-  }, [options.length]);
+    onChangeDevice(type, event.target.value);
+  };
 
   return (
     <Select
       value={value}
       displayEmpty
       fullWidth
-      label={label}
       variant="outlined"
+      onChange={handleChangeDevice}
     >
       <MenuItem value="" disabled>
         Select device
@@ -62,6 +55,21 @@ const CustomSelect = ({ options, label }) => {
       ))}
     </Select>
   );
+};
+
+const setter = (options, setValue) => {
+  if (options.length === 1) {
+    const [{ deviceId }] = options;
+
+    setValue(deviceId);
+    return;
+  }
+
+  const [{ deviceId }] = options.filter(
+    ({ deviceId }) => deviceId === "default"
+  );
+
+  setValue(deviceId);
 };
 
 const peer = new RTCPeerConnection(PEER.CONFIG);
@@ -82,11 +90,18 @@ const usePeer = () => {
   const [microphoneDevices, setMicrophoneDevices] = React.useState([]);
   const [volumeDevices, setVolumeDevices] = React.useState([]);
 
+  const [selectedVideoDevice, setSelectedVideoDevice] = React.useState("");
+  const [
+    selectedMicrophoneDevice,
+    setSelectedMicrophoneDevice,
+  ] = React.useState("");
+  const [selectedVolumeDevice, setSelectedVolumeDevice] = React.useState("");
+
   const [joinedUsers, setJoinedUsers] = React.useState([]);
 
   const [deviceConstraints, setDeviceConstraints] = React.useState({
     video: true,
-    audio: !true,
+    audio: true,
   });
 
   const handleConnectToMediaStream = async (constraints) => {
@@ -96,33 +111,27 @@ const usePeer = () => {
 
     if (!videoRef.current) return;
 
-    stream.getTracks().forEach((track) => {
-      peer.addTrack(track, stream);
-    });
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
     // NOTE: fix me
     videoRef.current.srcObject = stream;
   };
 
-  // const handleConnectToDevices = async () => {
-  //   const devices = await navigator.mediaDevices.enumerateDevices();
+  const handleConnectToDevices = async () => {
+    const devices = await navigator.mediaDevices.enumerateDevices();
 
-  //   const microphones = devices.filter(({ kind }) => kind === "audioinput");
-  //   const volumes = devices.filter(({ kind }) => kind === "audiooutput");
-  //   const videos = devices.filter(({ kind }) => kind === "videoinput");
+    const microphones = devices.filter(({ kind }) => kind === "audioinput");
+    const volumes = devices.filter(({ kind }) => kind === "audiooutput");
+    const videos = devices.filter(({ kind }) => kind === "videoinput");
 
-  //   setVideoDevices(videos);
-  //   setVolumeDevices(volumes);
-  //   setMicrophoneDevices(microphones);
+    setter(microphones, setSelectedMicrophoneDevice);
+    setter(volumes, setSelectedVolumeDevice);
+    setter(videos, setSelectedVideoDevice);
 
-  //   handleConnectToMediaStream();
-  // };
-
-  // const handleCInitPeer = () => {
-  //   const peerInit = new RTCPeerConnection(PEER.CONFIG);
-
-  //   setPeer(peerInit);
-  // };
+    setVideoDevices(videos);
+    setVolumeDevices(volumes);
+    setMicrophoneDevices(microphones);
+  };
 
   const handleCall = async () => {
     const sdpOffer = await peer.createOffer({ offerToReceiveVideo: true });
@@ -155,12 +164,12 @@ const usePeer = () => {
   const handleSelectRecipient = (newRecipientName) =>
     setRecipientName(newRecipientName);
 
-  // const handleInitListenersForDevices = () => {
-  //   navigator.mediaDevices.addEventListener(
-  //     "devicechange",
-  //     handleConnectToDevices
-  //   );
-  // };
+  const handleInitListenersForDevices = () => {
+    navigator.mediaDevices.addEventListener(
+      "devicechange",
+      handleConnectToDevices
+    );
+  };
 
   const handleInitListenersForPeer = () => {
     peer.addEventListener("icecandidate", ({ candidate }) => {
@@ -205,12 +214,58 @@ const usePeer = () => {
       return newDevicesContraints;
     });
 
+  const handleChangeDevice = async (type, deviceId) => {
+    const newDevicesContraints = {
+      ...deviceConstraints,
+      [type]: {
+        deviceId: {
+          exact: deviceId,
+        },
+      },
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(
+      newDevicesContraints
+    );
+    const track = stream.getTracks().find((track) => track.kind === type);
+
+    if (!track) return;
+
+    const sender = peer
+      .getSenders()
+      .find((sender) => sender.track.kind === track.kind);
+
+    if (!sender) return;
+
+    sender.replaceTrack(track);
+
+    switch (type) {
+      case "audio":
+        setSelectedMicrophoneDevice(deviceId);
+        break;
+      case "video":
+        setSelectedVideoDevice(deviceId);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleChangeOutputDevice = (deviceId) => {
+    if (!videoRef.current) return;
+
+    setSelectedVolumeDevice(deviceId);
+
+    // NOTE: do not work with connecting with new devices
+    videoRef.current.setSinkId(deviceId);
+  };
+
   React.useEffect(() => {
-    // handleCInitPeer();
     handleInitListenersForPeer();
-    handleConnectToMediaStream(deviceConstraints);
-    // handleConnectToDevices();
-    // handleInitListenersForDevices();
+    handleConnectToDevices().then(() => {
+      handleConnectToMediaStream(deviceConstraints);
+    });
+    handleInitListenersForDevices();
 
     socket.addEventListener("message", async (message) => {
       const { type, data, sender, recipient } = JSON.parse(message.data);
@@ -265,6 +320,12 @@ const usePeer = () => {
     isAudioOn: deviceConstraints.audio,
     handleToggleDevicesStatus,
 
+    selectedVideoDevice,
+    selectedMicrophoneDevice,
+    selectedVolumeDevice,
+    handleChangeDevice,
+    handleChangeOutputDevice,
+
     localeStream,
     videoDevices,
     microphoneDevices,
@@ -315,6 +376,41 @@ export const App = () => {
             </IconButton>
           </Grid>
         </Grid>
+        <Grid item xs={12} container spacing={2}>
+          {Boolean(peer.microphoneDevices.length) && (
+            <Grid item xs={4}>
+              microphoneDevices
+              <CustomSelect
+                value={peer.selectedMicrophoneDevice}
+                type="audio"
+                options={peer.microphoneDevices}
+                onChangeDevice={peer.handleChangeDevice}
+              />
+            </Grid>
+          )}
+          {Boolean(peer.videoDevices.length) && (
+            <Grid item xs={4}>
+              videoDevices
+              <CustomSelect
+                value={peer.selectedVideoDevice}
+                type="video"
+                options={peer.videoDevices}
+                onChangeDevice={peer.handleChangeDevice}
+              />
+            </Grid>
+          )}
+          {Boolean(peer.volumeDevices.length) && (
+            <Grid item xs={4}>
+              volumeDevices
+              <CustomSelect
+                value={peer.selectedVolumeDevice}
+                type="volume"
+                options={peer.volumeDevices}
+                onChangeDevice={peer.handleChangeOutputDevice}
+              />
+            </Grid>
+          )}
+        </Grid>
         <Grid item xs={12}>
           <TextField
             value={peer.senderName}
@@ -354,24 +450,6 @@ export const App = () => {
               : "Join"}
           </Button>
         </Grid>
-        {/* {Boolean(peer.microphoneDevices.length) && (
-          <Grid item xs={4}>
-            <CustomSelect
-              label="Microphone devices"
-              options={peer.microphoneDevices}
-            />
-          </Grid>
-        )}
-        {Boolean(peer.volumeDevices.length) && (
-          <Grid item xs={4}>
-            <CustomSelect label="Volume devices" options={peer.volumeDevices} />
-          </Grid>
-        )}
-        {Boolean(peer.videoDevices.length) && (
-          <Grid item xs={4}>
-            <CustomSelect label="Video devices" options={peer.videoDevices} />
-          </Grid>
-        )} */}
       </Grid>
       <Lobby
         users={peer.joinedUsers}
