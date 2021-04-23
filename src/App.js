@@ -8,17 +8,15 @@ import {
   Grid,
   Box,
   Button,
-  Paper,
-  Typography,
-  Badge,
   TextField,
-  IconButton,
 } from "@material-ui/core";
 import "webrtc-adapter";
 
 import { PEER } from "./config/peer";
 import { socket } from "./config/socket";
 import { MESSAGE } from "./constants";
+
+import { Lobby } from "./Lobby";
 
 const buttonProps = {
   variant: "contained",
@@ -96,6 +94,7 @@ const usePeer = () => {
       peer.addTrack(track, stream);
     });
 
+    // NOTE: fix me
     videoRef.current.srcObject = stream;
   };
 
@@ -120,10 +119,8 @@ const usePeer = () => {
   // };
 
   const handleCall = async () => {
-    // console.log("Create offer...");
     const sdpOffer = await peer.createOffer({ offerToReceiveVideo: true });
 
-    // console.log("Set local offer...", sdpOffer);
     await peer.setLocalDescription(sdpOffer);
 
     const message = {
@@ -135,7 +132,6 @@ const usePeer = () => {
 
     recipientRef.current = recipientName;
 
-    // console.log("Send offer...");
     socket.send(JSON.stringify(message));
   };
 
@@ -170,14 +166,9 @@ const usePeer = () => {
           recipient: recipientRef.current,
         };
 
-        // console.log("send ice candidate", message);
         socket.send(JSON.stringify(message));
       }
     });
-
-    // peer.addEventListener("iceconnectionstatechange", (event) => {
-    //   console.log("iceconnectionstatechange event", event);
-    // });
 
     peer.addEventListener("track", ({ streams }) => {
       if (!remoteVideoRef.current) return;
@@ -185,8 +176,6 @@ const usePeer = () => {
       const [stream] = streams;
 
       if (remoteVideoRef.current.srcObject === stream) return;
-
-      // console.log("got remote stream");
 
       remoteVideoRef.current.srcObject = stream;
     });
@@ -204,24 +193,20 @@ const usePeer = () => {
     socket.addEventListener("message", async (message) => {
       const { type, data, sender, recipient } = JSON.parse(message.data);
 
-      // console.log("Got new message", data);
-
       if (type === MESSAGE.TYPE.PEER_LIST_CHANGED) {
         setJoinedUsers(data.users);
       }
 
       if (type === MESSAGE.TYPE.WEBRTC_OFFER && sender !== senderName) {
+        // NOTE: fix me
         recipientRef.current = sender;
-        // console.log("Save remote offer...", data);
+
         await peer.setRemoteDescription(data);
 
-        // console.log("Create answer");
         const sdpAnswer = await peer.createAnswer();
 
-        // console.log("Set local answer...", sdpAnswer);
         await peer.setLocalDescription(sdpAnswer);
 
-        // console.log("Send answer");
         const message = {
           type: MESSAGE.TYPE.WEBRTC_ANSWER,
           data: sdpAnswer,
@@ -232,15 +217,11 @@ const usePeer = () => {
       }
 
       if (type === MESSAGE.TYPE.WEBRTC_ANSWER && sender !== senderName) {
-        // console.log("Save remote answer...", data);
-
         await peer.setRemoteDescription(data);
       }
 
       console.log(type);
       if (type === MESSAGE.TYPE.ICE_CANDIDATE) {
-        // console.log(`ICE_CANDIDATE from ${sender}`, data);
-
         peer.addIceCandidate(data);
       }
     });
@@ -346,29 +327,11 @@ export const App = () => {
           </Grid>
         )} */}
       </Grid>
-      <Grid container spacing={2}>
-        {peer.joinedUsers.map(({ name, status }) => {
-          if (peer.senderName === name) return null;
-
-          return (
-            <Grid item xs="auto" key={name}>
-              <Badge
-                badgeContent={status === "ONLINE" ? "online" : "offline"}
-                color={status === "ONLINE" ? "primary" : "secondary"}
-              >
-                <IconButton
-                  style={{ borderRadius: 8 }}
-                  onClick={() => peer.handleSelectRecipient(name)}
-                >
-                  <Paper component={Box} p={2}>
-                    <Typography>{name}</Typography>
-                  </Paper>
-                </IconButton>
-              </Badge>
-            </Grid>
-          );
-        })}
-      </Grid>
+      <Lobby
+        users={peer.joinedUsers}
+        myName={peer.senderName}
+        onSelectRecipient={peer.handleSelectRecipient}
+      />
     </Box>
   );
 };
