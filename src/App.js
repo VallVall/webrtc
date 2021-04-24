@@ -26,15 +26,28 @@ const buttonProps = {
   color: "primary",
 };
 
-const CustomSelect = ({ value, options, type, onChangeDevice }) => {
-  const handleChangeDevice = (event) => {
-    if (type === "volume") {
-      onChangeDevice(event.target.value);
+const filterDevices = (devices, kind) =>
+  devices.filter(
+    (device) => device.kind === kind && device.deviceId !== "default"
+  );
 
-      return;
+const CustomSelect = ({
+  value,
+  options,
+  type,
+  onChangeDevice,
+  onChangeOutputDevice,
+}) => {
+  const handleChangeDevice = (event) => {
+    const deviceId = event.target.value;
+
+    if (onChangeDevice) {
+      onChangeDevice(type, deviceId);
     }
 
-    onChangeDevice(type, event.target.value);
+    if (onChangeOutputDevice) {
+      onChangeOutputDevice(deviceId);
+    }
   };
 
   return (
@@ -57,20 +70,17 @@ const CustomSelect = ({ value, options, type, onChangeDevice }) => {
   );
 };
 
-const setter = (options, setValue) => {
-  if (options.length === 1) {
-    const [{ deviceId }] = options;
+const getDefaultDevice = (devices) => {
+  if (devices.length) {
+    const [{ deviceId }] = devices;
 
-    setValue(deviceId);
-    return;
+    return deviceId;
   }
 
-  const [{ deviceId }] = options.filter(
-    ({ deviceId }) => deviceId === "default"
-  );
-
-  setValue(deviceId);
+  return undefined;
 };
+
+const generateSenderName = () => `${uuid().slice(0, 4)}@${uuid().slice(0, 4)}`;
 
 const peer = new RTCPeerConnection(PEER.CONFIG);
 
@@ -80,22 +90,21 @@ const usePeer = () => {
 
   const recipientRef = React.useRef(null);
 
-  const [senderName, setSenderName] = React.useState(
-    `${uuid().slice(0, 4)}@${uuid().slice(0, 4)}`
-  );
+  const [senderName, setSenderName] = React.useState(generateSenderName());
   const [recipientName, setRecipientName] = React.useState("");
   const [localeStream, setLocaleStream] = React.useState(null);
 
-  const [videoDevices, setVideoDevices] = React.useState([]);
-  const [microphoneDevices, setMicrophoneDevices] = React.useState([]);
-  const [volumeDevices, setVolumeDevices] = React.useState([]);
+  const [devices, setDevices] = React.useState({
+    microphones: [],
+    volumes: [],
+    videos: [],
+  });
 
-  const [selectedVideoDevice, setSelectedVideoDevice] = React.useState("");
-  const [
-    selectedMicrophoneDevice,
-    setSelectedMicrophoneDevice,
-  ] = React.useState("");
-  const [selectedVolumeDevice, setSelectedVolumeDevice] = React.useState("");
+  const [selectedDevices, setSelectedDevices] = React.useState({
+    microphoneId: "",
+    volumeId: "",
+    videoId: "",
+  });
 
   const [joinedUsers, setJoinedUsers] = React.useState([]);
 
@@ -104,8 +113,54 @@ const usePeer = () => {
     audio: true,
   });
 
-  const handleConnectToMediaStream = async (constraints) => {
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  // const handleConnectToMediaStream = async (constraints) => {
+  //   const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+  //   setLocaleStream(stream);
+
+  //   if (!videoRef.current) return;
+
+  //   stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
+  //   // NOTE: fix me
+  //   videoRef.current.srcObject = stream;
+  // };
+
+  const handleConnectToDevices = async () => {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+
+    const microphones = filterDevices(devices, "audioinput");
+    const volumes = filterDevices(devices, "audiooutput");
+    const videos = filterDevices(devices, "videoinput");
+
+    setDevices({
+      microphones,
+      volumes,
+      videos,
+    });
+
+    const microphoneId = getDefaultDevice(microphones);
+    const volumeId = getDefaultDevice(volumes);
+    const videoId = getDefaultDevice(videos);
+
+    setSelectedDevices({
+      microphoneId,
+      volumeId,
+      videoId,
+    });
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        deviceId: {
+          exact: videoId,
+        },
+      },
+      audio: {
+        deviceId: {
+          exact: microphoneId,
+        },
+      },
+    });
 
     setLocaleStream(stream);
 
@@ -117,24 +172,11 @@ const usePeer = () => {
     videoRef.current.srcObject = stream;
   };
 
-  const handleConnectToDevices = async () => {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-
-    const microphones = devices.filter(({ kind }) => kind === "audioinput");
-    const volumes = devices.filter(({ kind }) => kind === "audiooutput");
-    const videos = devices.filter(({ kind }) => kind === "videoinput");
-
-    setter(microphones, setSelectedMicrophoneDevice);
-    setter(volumes, setSelectedVolumeDevice);
-    setter(videos, setSelectedVideoDevice);
-
-    setVideoDevices(videos);
-    setVolumeDevices(volumes);
-    setMicrophoneDevices(microphones);
-  };
-
   const handleCall = async () => {
-    const sdpOffer = await peer.createOffer({ offerToReceiveVideo: true });
+    const sdpOffer = await peer.createOffer({
+      offerToReceiveVideo: true,
+      offerToReceiveAudio: true,
+    });
 
     await peer.setLocalDescription(sdpOffer);
 
@@ -214,12 +256,52 @@ const usePeer = () => {
       return newDevicesContraints;
     });
 
+  // const handleChangeDevice = async (type, deviceId) => {
+  //   const newDevicesContraints = {
+  //     ...deviceConstraints,
+  //     [type]: {
+  //       deviceId: {
+  //         exact: deviceId,
+  //       },
+  //     },
+  //   };
+
+  //   const stream = await navigator.mediaDevices.getUserMedia(
+  //     newDevicesContraints
+  //   );
+  //   const track = stream.getTracks().find((track) => track.kind === type);
+
+  //   if (!track) return;
+
+  //   const sender = peer
+  //     .getSenders()
+  //     .find((sender) => sender.track.kind === track.kind);
+
+  //   if (!sender) return;
+
+  //   sender.replaceTrack(track);
+
+  //   setSelectedDevices((state) => ({
+  //     ...state,
+  //     [type]: deviceId,
+  //   }));
+  // };
+
   const handleChangeDevice = async (type, deviceId) => {
+    const newSelectedDevices = {
+      ...selectedDevices,
+      [type]: deviceId,
+    };
+
     const newDevicesContraints = {
-      ...deviceConstraints,
-      [type]: {
+      video: {
         deviceId: {
-          exact: deviceId,
+          exact: newSelectedDevices.videoId,
+        },
+      },
+      audio: {
+        deviceId: {
+          exact: newSelectedDevices.microphoneId,
         },
       },
     };
@@ -227,34 +309,32 @@ const usePeer = () => {
     const stream = await navigator.mediaDevices.getUserMedia(
       newDevicesContraints
     );
-    const track = stream.getTracks().find((track) => track.kind === type);
 
-    if (!track) return;
+    localeStream.getTracks().forEach((track) => {
+      track.stop();
+    });
 
-    const sender = peer
-      .getSenders()
-      .find((sender) => sender.track.kind === track.kind);
+    setLocaleStream(stream);
 
-    if (!sender) return;
+    if (!videoRef.current) return;
 
-    sender.replaceTrack(track);
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
-    switch (type) {
-      case "audio":
-        setSelectedMicrophoneDevice(deviceId);
-        break;
-      case "video":
-        setSelectedVideoDevice(deviceId);
-        break;
-      default:
-        break;
-    }
+    // NOTE: fix me
+    videoRef.current.srcObject = stream;
+
+    console.log("newSelectedDevices", newSelectedDevices);
+
+    setSelectedDevices(newSelectedDevices);
   };
 
   const handleChangeOutputDevice = (deviceId) => {
     if (!videoRef.current) return;
 
-    setSelectedVolumeDevice(deviceId);
+    setSelectedDevices((currentSelectedDevices) => ({
+      ...currentSelectedDevices,
+      volumeId: deviceId,
+    }));
 
     // NOTE: do not work with connecting with new devices
     videoRef.current.setSinkId(deviceId);
@@ -262,9 +342,7 @@ const usePeer = () => {
 
   React.useEffect(() => {
     handleInitListenersForPeer();
-    handleConnectToDevices().then(() => {
-      handleConnectToMediaStream(deviceConstraints);
-    });
+    handleConnectToDevices();
     handleInitListenersForDevices();
 
     socket.addEventListener("message", async (message) => {
@@ -320,16 +398,12 @@ const usePeer = () => {
     isAudioOn: deviceConstraints.audio,
     handleToggleDevicesStatus,
 
-    selectedVideoDevice,
-    selectedMicrophoneDevice,
-    selectedVolumeDevice,
+    devices,
+    selectedDevices,
     handleChangeDevice,
     handleChangeOutputDevice,
 
     localeStream,
-    videoDevices,
-    microphoneDevices,
-    volumeDevices,
     joinedUsers,
     handleCall,
     handleJoinLobby,
@@ -377,39 +451,32 @@ export const App = () => {
           </Grid>
         </Grid>
         <Grid item xs={12} container spacing={2}>
-          {Boolean(peer.microphoneDevices.length) && (
-            <Grid item xs={4}>
-              microphoneDevices
-              <CustomSelect
-                value={peer.selectedMicrophoneDevice}
-                type="audio"
-                options={peer.microphoneDevices}
-                onChangeDevice={peer.handleChangeDevice}
-              />
-            </Grid>
-          )}
-          {Boolean(peer.videoDevices.length) && (
-            <Grid item xs={4}>
-              videoDevices
-              <CustomSelect
-                value={peer.selectedVideoDevice}
-                type="video"
-                options={peer.videoDevices}
-                onChangeDevice={peer.handleChangeDevice}
-              />
-            </Grid>
-          )}
-          {Boolean(peer.volumeDevices.length) && (
-            <Grid item xs={4}>
-              volumeDevices
-              <CustomSelect
-                value={peer.selectedVolumeDevice}
-                type="volume"
-                options={peer.volumeDevices}
-                onChangeDevice={peer.handleChangeOutputDevice}
-              />
-            </Grid>
-          )}
+          <Grid item xs={4}>
+            microphoneDevices
+            <CustomSelect
+              value={peer.selectedDevices.microphoneId}
+              type="microphoneId"
+              options={peer.devices.microphones}
+              onChangeDevice={peer.handleChangeDevice}
+            />
+          </Grid>
+          <Grid item xs={4}>
+            videoDevices
+            <CustomSelect
+              value={peer.selectedDevices.videoId}
+              type="videoId"
+              options={peer.devices.videos}
+              onChangeDevice={peer.handleChangeDevice}
+            />
+          </Grid>
+          <Grid item xs={4}>
+            volumeDevices
+            <CustomSelect
+              value={peer.selectedDevices.volumeId}
+              options={peer.devices.volumes}
+              onChangeOutputDevice={peer.handleChangeOutputDevice}
+            />
+          </Grid>
         </Grid>
         <Grid item xs={12}>
           <TextField
