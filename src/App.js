@@ -310,9 +310,11 @@ const usePeer = () => {
       newDevicesContraints
     );
 
-    localeStream.getTracks().forEach((track) => {
-      track.stop();
-    });
+    if (localeStream) {
+      localeStream.getTracks().forEach((track) => {
+        track.stop();
+      });
+    }
 
     setLocaleStream(stream);
 
