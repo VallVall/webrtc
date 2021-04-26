@@ -2,7 +2,15 @@ import React from "react";
 
 import { v4 as uuid } from "uuid";
 
-import { Grid, Box, Button, TextField, IconButton } from "@material-ui/core";
+import {
+  Select,
+  MenuItem,
+  Grid,
+  Box,
+  Button,
+  TextField,
+  IconButton,
+} from "@material-ui/core";
 import { Videocam, VideocamOff, Mic, MicOff } from "@material-ui/icons";
 
 import "webrtc-adapter";
@@ -18,21 +26,19 @@ const buttonProps = {
   color: "primary",
 };
 
-const PREFIX = "test";
+const generateSenderName = () => `${uuid().slice(0, 4)}@${uuid().slice(0, 4)}`;
 
-const generateSenderName = () => `${PREFIX}@${uuid().slice(0, 4)}`;
+const peer = new RTCPeerConnection(PEER.CONFIG);
 
 const usePeer = () => {
-  const peerRef = React.useRef(null);
-  const localStreamRef = React.useRef(null);
-
   const localVideoRef = React.useRef(null);
   const remoteVideoRef = React.useRef(null);
 
-  const [isRemoteVideoVisible, setRemoteVideoVisable] = React.useState(false);
+  const recipientRef = React.useRef(null);
 
   const [senderName, setSenderName] = React.useState(generateSenderName());
   const [recipientName, setRecipientName] = React.useState("");
+  const [localeStream, setLocaleStream] = React.useState(null);
 
   const [joinedUsers, setJoinedUsers] = React.useState([]);
 
@@ -47,73 +53,22 @@ const usePeer = () => {
       audio: true,
     });
 
+    setLocaleStream(stream);
+
     if (!localVideoRef.current) return;
 
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
     localVideoRef.current.srcObject = stream;
-    localStreamRef.current = stream;
-  };
-
-  const handleHungUp = () => {
-    setRemoteVideoVisable(false);
-
-    peerRef.current.ontrack = null;
-    peerRef.current.onicecandidate = null;
-    peerRef.current.close();
-
-    const message = {
-      type: MESSAGE.TYPE.HANG_UP,
-      data: "",
-      sender: senderName,
-      recipient: recipientName,
-    };
-
-    socket.send(JSON.stringify(message));
-  };
-
-  const handleCreatePeerConnection = () => {
-    setRemoteVideoVisable(true);
-
-    peerRef.current = new RTCPeerConnection(PEER.CONFIG);
-
-    localStreamRef.current
-      .getTracks()
-      .forEach((track) =>
-        peerRef.current.addTrack(track, localStreamRef.current)
-      );
-
-    peerRef.current.onicecandidate = ({ candidate }) => {
-      if (candidate) {
-        const message = {
-          type: MESSAGE.TYPE.ICE_CANDIDATE,
-          data: candidate,
-          sender: senderName,
-          recipient: recipientName,
-        };
-
-        socket.send(JSON.stringify(message));
-      }
-    };
-
-    peerRef.current.ontrack = (event) => {
-      if (!remoteVideoRef.current) return;
-
-      const [stream] = event.streams;
-
-      if (remoteVideoRef.current.srcObject === stream) return;
-
-      remoteVideoRef.current.srcObject = stream;
-    };
   };
 
   const handleCall = async () => {
-    handleCreatePeerConnection();
-
-    const sdpOffer = await peerRef.current.createOffer({
+    const sdpOffer = await peer.createOffer({
       offerToReceiveVideo: true,
       offerToReceiveAudio: true,
     });
 
-    await peerRef.current.setLocalDescription(sdpOffer);
+    await peer.setLocalDescription(sdpOffer);
 
     const message = {
       type: MESSAGE.TYPE.WEBRTC_OFFER,
@@ -122,7 +77,22 @@ const usePeer = () => {
       recipient: recipientName,
     };
 
+    // NOTE: fix me
+    recipientRef.current = recipientName;
+
     socket.send(JSON.stringify(message));
+  };
+
+  const handleHungUp = () => {
+    remoteVideoRef.current.srcObject
+      .getTracks()
+      .forEach((track) => track.stop());
+
+    localVideoRef.current.srcObject
+      .getTracks()
+      .forEach((track) => track.stop());
+
+    peer.close();
   };
 
   const handleJoinLobby = () => {
@@ -146,7 +116,7 @@ const usePeer = () => {
         [deviceType]: !currentDevicesMuteStatuses[deviceType],
       };
 
-      localStreamRef.current.getTracks().forEach((track) => {
+      localeStream.getTracks().forEach((track) => {
         if (track.kind === deviceType) {
           track.enabled = !track.enabled;
         }
@@ -155,30 +125,61 @@ const usePeer = () => {
       return newDevicesMuteStatuses;
     });
 
+  const handleInitListenersForPeer = () => {
+    peer.addEventListener("icecandidate", ({ candidate }) => {
+      if (candidate) {
+        const message = {
+          type: MESSAGE.TYPE.ICE_CANDIDATE,
+          data: candidate,
+          sender: senderName,
+          recipient: recipientRef.current,
+        };
+
+        socket.send(JSON.stringify(message));
+      }
+    });
+
+    peer.addEventListener("track", (event) => {
+      if (!remoteVideoRef.current) return;
+
+      const [stream] = event.streams;
+
+      if (remoteVideoRef.current.srcObject === stream) return;
+
+      remoteVideoRef.current.srcObject = stream;
+    });
+
+    peer.addEventListener("iceconnectionstatechange", () => {
+      // disconnected, connected, checking
+      if (peer.iceConnectionState === "disconnected") {
+        handleHungUp();
+        peer.ontrack = null;
+        peer.onicecandidate = null;
+      }
+    });
+  };
+
   const handleChangeSenderName = (event) => setSenderName(event.target.value);
 
-  const handleConnectSocket = () => {
+  React.useEffect(() => {
+    handleConnectToMediaStream().then(handleInitListenersForPeer);
+
     socket.addEventListener("message", async (message) => {
       const { type, data, sender, recipient } = JSON.parse(message.data);
 
       if (type === MESSAGE.TYPE.PEER_LIST_CHANGED) {
-        const filteredUsers = data.users.filter((user) =>
-          user.name.includes(PREFIX)
-        );
-
-        setJoinedUsers(filteredUsers);
+        setJoinedUsers(data.users);
       }
 
       if (type === MESSAGE.TYPE.WEBRTC_OFFER && sender !== senderName) {
-        handleCreatePeerConnection();
+        // NOTE: fix me
+        recipientRef.current = sender;
 
-        setRecipientName(sender);
+        await peer.setRemoteDescription(data);
 
-        await peerRef.current.setRemoteDescription(data);
+        const sdpAnswer = await peer.createAnswer();
 
-        const sdpAnswer = await peerRef.current.createAnswer();
-
-        await peerRef.current.setLocalDescription(sdpAnswer);
+        await peer.setLocalDescription(sdpAnswer);
 
         const message = {
           type: MESSAGE.TYPE.WEBRTC_ANSWER,
@@ -190,25 +191,18 @@ const usePeer = () => {
       }
 
       if (type === MESSAGE.TYPE.WEBRTC_ANSWER && sender !== senderName) {
-        await peerRef.current.setRemoteDescription(data);
+        await peer.setRemoteDescription(data);
       }
 
       if (type === MESSAGE.TYPE.ICE_CANDIDATE && sender !== senderName) {
-        peerRef.current.addIceCandidate(data);
-      }
-
-      if (type === MESSAGE.TYPE.HANG_UP && sender !== senderName) {
-        handleHungUp();
+        peer.addIceCandidate(data);
       }
     });
-  };
-
-  React.useEffect(() => {
-    handleConnectToMediaStream();
-    handleConnectSocket();
   }, []);
 
   return {
+    peer,
+
     senderName,
     handleChangeSenderName,
 
@@ -217,12 +211,12 @@ const usePeer = () => {
 
     localVideoRef,
     remoteVideoRef,
-    isRemoteVideoVisible,
 
     isVideoOn: devicesMuteStatuses.video,
     isAudioOn: devicesMuteStatuses.audio,
     handleToggleDevicesMuteStatus,
 
+    localeStream,
     joinedUsers,
     handleCall,
     handleHungUp,
@@ -243,15 +237,13 @@ export const App = () => {
             style={{ width: "100%", height: "100%" }}
           />
         </Grid>
-        {peer.isRemoteVideoVisible && (
-          <Grid item xs={6}>
-            <video
-              autoPlay
-              ref={peer.remoteVideoRef}
-              style={{ width: "100%", height: "100%" }}
-            />
-          </Grid>
-        )}
+        <Grid item xs={6}>
+          <video
+            autoPlay
+            ref={peer.remoteVideoRef}
+            style={{ width: "100%", height: "100%" }}
+          />
+        </Grid>
         <Grid item xs={12} container spacing={2} justify="center">
           <Grid item xs="auto">
             <IconButton onClick={peer.handleToggleDevicesMuteStatus("video")}>
