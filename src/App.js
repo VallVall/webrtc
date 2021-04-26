@@ -48,7 +48,7 @@ const usePeer = () => {
   const handleConnectToMediaStream = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
-      audio: true,
+      audio: false,
     });
 
     if (!localVideoRef.current) return;
