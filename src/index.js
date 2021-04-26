@@ -4,6 +4,8 @@ import { App } from "./App";
 import CssBaseline from "@material-ui/core/CssBaseline";
 import reportWebVitals from "./reportWebVitals";
 
+import "webrtc-adapter";
+
 ReactDOM.render(
   <>
     <CssBaseline />

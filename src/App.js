@@ -5,8 +5,6 @@ import { v4 as uuid } from "uuid";
 import { Grid, Box, Button, TextField, IconButton } from "@material-ui/core";
 import { Videocam, VideocamOff, Mic, MicOff } from "@material-ui/icons";
 
-import "webrtc-adapter";
-
 import { PEER } from "./config/peer";
 import { socket } from "./config/socket";
 import { MESSAGE } from "./constants";
@@ -41,6 +39,12 @@ const usePeer = () => {
     audio: true,
   });
 
+  const [disableButtons, setDisableButtonss] = React.useState({
+    join: false,
+    call: true,
+    hungUp: true,
+  });
+
   const handleConnectToMediaStream = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
@@ -68,10 +72,20 @@ const usePeer = () => {
     };
 
     socket.send(JSON.stringify(message));
+    setDisableButtonss((state) => ({
+      ...state,
+      call: false,
+      hungUp: true,
+    }));
   };
 
   const handleCreatePeerConnection = () => {
     setRemoteVideoVisable(true);
+    setDisableButtonss((state) => ({
+      ...state,
+      call: true,
+      hungUp: false,
+    }));
 
     peerRef.current = new RTCPeerConnection(PEER.CONFIG);
 
@@ -134,10 +148,20 @@ const usePeer = () => {
     };
 
     socket.send(JSON.stringify(message));
+    setDisableButtonss((state) => ({
+      ...state,
+      join: true,
+      hungUp: true,
+    }));
   };
 
-  const handleSelectRecipient = (newRecipientName) =>
+  const handleSelectRecipient = (newRecipientName) => {
     setRecipientName(newRecipientName);
+    setDisableButtonss((state) => ({
+      ...state,
+      call: false,
+    }));
+  };
 
   const handleToggleDevicesMuteStatus = (deviceType) => () =>
     setDeviceMuteStatus((currentDevicesMuteStatuses) => {
@@ -219,6 +243,8 @@ const usePeer = () => {
     remoteVideoRef,
     isRemoteVideoVisible,
 
+    disableButtons,
+
     isVideoOn: devicesMuteStatuses.video,
     isAudioOn: devicesMuteStatuses.audio,
     handleToggleDevicesMuteStatus,
@@ -279,16 +305,14 @@ export const App = () => {
             variant="outlined"
             fullWidth
             autoFocus
-            disabled={Boolean(
-              peer.joinedUsers.find(({ name }) => name === peer.senderName)
-            )}
+            disabled={peer.disableButtons.join}
           />
         </Grid>
         <Grid item xs="auto">
           <Button
             {...buttonProps}
             onClick={peer.handleCall}
-            disabled={!peer.recipientName}
+            disabled={peer.disableButtons.call}
           >
             Call {peer.recipientName && `to ${peer.recipientName}`}
           </Button>
@@ -297,22 +321,17 @@ export const App = () => {
           <Button
             {...buttonProps}
             onClick={peer.handleJoinLobby}
-            disabled={
-              !peer.senderName ||
-              Boolean(
-                peer.joinedUsers.find(({ name }) => name === peer.senderName)
-              )
-            }
+            disabled={peer.disableButtons.join}
           >
-            {Boolean(
-              peer.joinedUsers.find(({ name }) => name === peer.senderName)
-            )
-              ? "Joined"
-              : "Join"}
+            {peer.disableButtons.join ? "Joined" : "Join"}
           </Button>
         </Grid>
         <Grid item xs="auto">
-          <Button {...buttonProps} onClick={peer.handleHungUp}>
+          <Button
+            {...buttonProps}
+            onClick={peer.handleHungUp}
+            disabled={peer.disableButtons.hungUp}
+          >
             Hung up
           </Button>
         </Grid>
