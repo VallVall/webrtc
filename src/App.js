@@ -26,10 +26,9 @@ const usePeer = () => {
 
   const localVideoRef = React.useRef(null);
   const remoteVideoRef = React.useRef(null);
+  const anotherVideoRef = React.useRef(null);
 
   const recipientNameRef = React.useRef(null);
-
-  const [isRemoteVideoVisible, setRemoteVideoVisable] = React.useState(false);
 
   const [senderName, setSenderName] = React.useState(generateSenderName());
 
@@ -59,8 +58,6 @@ const usePeer = () => {
   };
 
   const handleHungUp = () => {
-    setRemoteVideoVisable(false);
-
     peerRef.current.ontrack = null;
     peerRef.current.onicecandidate = null;
     peerRef.current.close();
@@ -83,7 +80,6 @@ const usePeer = () => {
   const handleCreatePeerConnection = async () => {
     peerRef.current = new RTCPeerConnection(PEER.CONFIG);
 
-    setRemoteVideoVisable(true);
     setDisableButtonss((state) => ({
       ...state,
       call: true,
@@ -116,7 +112,14 @@ const usePeer = () => {
 
       if (remoteVideoRef.current.srcObject === stream) return;
 
-      remoteVideoRef.current.srcObject = stream;
+      if (!remoteVideoRef.current.srcObject) {
+        remoteVideoRef.current.srcObject = stream;
+        return;
+      }
+
+      if (!anotherVideoRef.current.srcObject) {
+        anotherVideoRef.current.srcObject = stream;
+      }
     });
   };
 
@@ -245,7 +248,7 @@ const usePeer = () => {
 
     localVideoRef,
     remoteVideoRef,
-    isRemoteVideoVisible,
+    anotherVideoRef,
 
     disableButtons,
 
@@ -266,22 +269,27 @@ export const App = () => {
   return (
     <Box p={2}>
       <Grid container spacing={2} justify="center">
-        <Grid item xs={6}>
+        <Grid item xs={4}>
           <video
             autoPlay
             ref={peer.localVideoRef}
             style={{ width: "100%", height: "100%" }}
           />
         </Grid>
-        {peer.isRemoteVideoVisible && (
-          <Grid item xs={6}>
-            <video
-              autoPlay
-              ref={peer.remoteVideoRef}
-              style={{ width: "100%", height: "100%" }}
-            />
-          </Grid>
-        )}
+        <Grid item xs={4}>
+          <video
+            autoPlay
+            ref={peer.remoteVideoRef}
+            style={{ width: "100%", height: "100%" }}
+          />
+        </Grid>
+        <Grid item xs={4}>
+          <video
+            autoPlay
+            ref={peer.anotherVideoRef}
+            style={{ width: "100%", height: "100%" }}
+          />
+        </Grid>
         <Grid item xs={12} container spacing={2} justify="center">
           <Grid item xs="auto">
             <IconButton onClick={peer.handleToggleDevicesMuteStatus("video")}>
