@@ -1,19 +1,19 @@
 {
   "files": {
-    "main.js": "/webrtc/static/js/main.d3abc645.chunk.js",
-    "main.js.map": "/webrtc/static/js/main.d3abc645.chunk.js.map",
+    "main.js": "/webrtc/static/js/main.b466ba2d.chunk.js",
+    "main.js.map": "/webrtc/static/js/main.b466ba2d.chunk.js.map",
     "runtime-main.js": "/webrtc/static/js/runtime-main.aaae6fb7.js",
     "runtime-main.js.map": "/webrtc/static/js/runtime-main.aaae6fb7.js.map",
-    "static/js/2.c0bb5fa2.chunk.js": "/webrtc/static/js/2.c0bb5fa2.chunk.js",
-    "static/js/2.c0bb5fa2.chunk.js.map": "/webrtc/static/js/2.c0bb5fa2.chunk.js.map",
+    "static/js/2.9c73ce61.chunk.js": "/webrtc/static/js/2.9c73ce61.chunk.js",
+    "static/js/2.9c73ce61.chunk.js.map": "/webrtc/static/js/2.9c73ce61.chunk.js.map",
     "static/js/3.59d795a6.chunk.js": "/webrtc/static/js/3.59d795a6.chunk.js",
     "static/js/3.59d795a6.chunk.js.map": "/webrtc/static/js/3.59d795a6.chunk.js.map",
     "index.html": "/webrtc/index.html",
-    "static/js/2.c0bb5fa2.chunk.js.LICENSE.txt": "/webrtc/static/js/2.c0bb5fa2.chunk.js.LICENSE.txt"
+    "static/js/2.9c73ce61.chunk.js.LICENSE.txt": "/webrtc/static/js/2.9c73ce61.chunk.js.LICENSE.txt"
   },
   "entrypoints": [
     "static/js/runtime-main.aaae6fb7.js",
-    "static/js/2.c0bb5fa2.chunk.js",
-    "static/js/main.d3abc645.chunk.js"
+    "static/js/2.9c73ce61.chunk.js",
+    "static/js/main.b466ba2d.chunk.js"
   ]
 }
