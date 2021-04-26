@@ -27,10 +27,11 @@ const usePeer = () => {
   const localVideoRef = React.useRef(null);
   const remoteVideoRef = React.useRef(null);
 
+  const recipientNameRef = React.useRef(null);
+
   const [isRemoteVideoVisible, setRemoteVideoVisable] = React.useState(false);
 
   const [senderName, setSenderName] = React.useState(generateSenderName());
-  const [recipientName, setRecipientName] = React.useState("");
 
   const [joinedUsers, setJoinedUsers] = React.useState([]);
 
@@ -68,7 +69,7 @@ const usePeer = () => {
       type: MESSAGE.TYPE.HANG_UP,
       data: "",
       sender: senderName,
-      recipient: recipientName,
+      recipient: recipientNameRef.current,
     };
 
     socket.send(JSON.stringify(message));
@@ -79,7 +80,9 @@ const usePeer = () => {
     }));
   };
 
-  const handleCreatePeerConnection = () => {
+  const handleCreatePeerConnection = async () => {
+    peerRef.current = new RTCPeerConnection(PEER.CONFIG);
+
     setRemoteVideoVisable(true);
     setDisableButtonss((state) => ({
       ...state,
@@ -87,28 +90,26 @@ const usePeer = () => {
       hungUp: false,
     }));
 
-    peerRef.current = new RTCPeerConnection(PEER.CONFIG);
-
     localStreamRef.current
       .getTracks()
       .forEach((track) =>
         peerRef.current.addTrack(track, localStreamRef.current)
       );
 
-    peerRef.current.onicecandidate = ({ candidate }) => {
+    peerRef.current.addEventListener("icecandidate", ({ candidate }) => {
       if (candidate) {
         const message = {
           type: MESSAGE.TYPE.ICE_CANDIDATE,
           data: candidate,
           sender: senderName,
-          recipient: recipientName,
+          recipient: recipientNameRef.current,
         };
 
         socket.send(JSON.stringify(message));
       }
-    };
+    });
 
-    peerRef.current.ontrack = (event) => {
+    peerRef.current.addEventListener("track", (event) => {
       if (!remoteVideoRef.current) return;
 
       const [stream] = event.streams;
@@ -116,7 +117,7 @@ const usePeer = () => {
       if (remoteVideoRef.current.srcObject === stream) return;
 
       remoteVideoRef.current.srcObject = stream;
-    };
+    });
   };
 
   const handleCall = async () => {
@@ -133,10 +134,14 @@ const usePeer = () => {
       type: MESSAGE.TYPE.WEBRTC_OFFER,
       data: sdpOffer,
       sender: senderName,
-      recipient: recipientName,
+      recipient: recipientNameRef.current,
     };
 
     socket.send(JSON.stringify(message));
+    setDisableButtonss((state) => ({
+      ...state,
+      call: true,
+    }));
   };
 
   const handleJoinLobby = () => {
@@ -156,7 +161,7 @@ const usePeer = () => {
   };
 
   const handleSelectRecipient = (newRecipientName) => {
-    setRecipientName(newRecipientName);
+    recipientNameRef.current = newRecipientName;
     setDisableButtonss((state) => ({
       ...state,
       call: false,
@@ -196,7 +201,7 @@ const usePeer = () => {
       if (type === MESSAGE.TYPE.WEBRTC_OFFER && sender !== senderName) {
         handleCreatePeerConnection();
 
-        setRecipientName(sender);
+        recipientNameRef.current = sender;
 
         await peerRef.current.setRemoteDescription(data);
 
@@ -236,7 +241,6 @@ const usePeer = () => {
     senderName,
     handleChangeSenderName,
 
-    recipientName,
     handleSelectRecipient,
 
     localVideoRef,
@@ -314,7 +318,7 @@ export const App = () => {
             onClick={peer.handleCall}
             disabled={peer.disableButtons.call}
           >
-            Call {peer.recipientName && `to ${peer.recipientName}`}
+            Call
           </Button>
         </Grid>
         <Grid item xs="auto">
