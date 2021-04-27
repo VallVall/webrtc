@@ -27,6 +27,7 @@ const usePeer = () => {
   const localVideoRef = React.useRef(null);
   const remoteVideoRef = React.useRef(null);
   const anotherVideoRef = React.useRef(null);
+  const videosRefs = React.useRef([]);
 
   const recipientNameRef = React.useRef(null);
 
@@ -51,9 +52,13 @@ const usePeer = () => {
       audio: false,
     });
 
-    if (!localVideoRef.current) return;
+    if (!videosRefs.current.length) return;
 
-    localVideoRef.current.srcObject = stream;
+    const videoWithoutStream = videosRefs.current.find(
+      (videoRef) => !Boolean(videoRef.srcObject)
+    );
+
+    videoWithoutStream.srcObject = stream;
     localStreamRef.current = stream;
   };
 
@@ -106,24 +111,19 @@ const usePeer = () => {
     });
 
     peerRef.current.addEventListener("track", (event) => {
-      if (!remoteVideoRef.current) return;
+      if (!videosRefs.current.length) return;
+
+      const videoWithoutStream = videosRefs.current.find(
+        (videoRef) => !Boolean(videoRef.srcObject)
+      );
 
       const [stream] = event.streams;
 
-      if (remoteVideoRef.current.srcObject === stream) return;
-
-      if (!remoteVideoRef.current.srcObject) {
-        remoteVideoRef.current.srcObject = stream;
-        return;
-      }
-
-      if (!anotherVideoRef.current.srcObject) {
-        anotherVideoRef.current.srcObject = stream;
-      }
+      videoWithoutStream.srcObject = stream;
     });
   };
 
-  const handleCall = async () => {
+  const handleCall = async (recipientName) => {
     handleCreatePeerConnection();
 
     const sdpOffer = await peerRef.current.createOffer({
@@ -137,7 +137,7 @@ const usePeer = () => {
       type: MESSAGE.TYPE.WEBRTC_OFFER,
       data: sdpOffer,
       sender: senderName,
-      recipient: recipientNameRef.current,
+      recipient: recipientName,
     };
 
     socket.send(JSON.stringify(message));
@@ -198,7 +198,24 @@ const usePeer = () => {
           user.name.includes(PREFIX)
         );
 
-        setJoinedUsers(filteredUsers);
+        setJoinedUsers((state) => {
+          const isCurrentUserExist = state.find(
+            (user) => user.name === senderName
+          );
+          const isNewUserExist = filteredUsers.find(
+            (user) => user.name === senderName
+          );
+
+          if (!isCurrentUserExist && isNewUserExist) {
+            setTimeout(() => {
+              handleConnectToMediaStream().then(() => {
+                state.forEach(({ name }) => handleCall(name));
+              });
+            }, 1000);
+          }
+
+          return filteredUsers;
+        });
       }
 
       if (type === MESSAGE.TYPE.WEBRTC_OFFER && sender !== senderName) {
@@ -235,8 +252,14 @@ const usePeer = () => {
     });
   };
 
+  const handleAddVideoRef = (videoRef) => {
+    if (videoRef && !videosRefs.current.includes(videoRef)) {
+      videosRefs.current.push(videoRef);
+    }
+  };
+
   React.useEffect(() => {
-    handleConnectToMediaStream();
+    // handleConnectToMediaStream();
     handleConnectSocket();
   }, []);
 
@@ -249,6 +272,7 @@ const usePeer = () => {
     localVideoRef,
     remoteVideoRef,
     anotherVideoRef,
+    handleAddVideoRef,
 
     disableButtons,
 
@@ -266,30 +290,20 @@ const usePeer = () => {
 export const App = () => {
   const peer = usePeer();
 
+  const columnSize = 12 / (peer.joinedUsers.length || 1);
+
   return (
     <Box p={2}>
       <Grid container spacing={2} justify="center">
-        <Grid item xs={4}>
-          <video
-            autoPlay
-            ref={peer.localVideoRef}
-            style={{ width: "100%", height: "100%" }}
-          />
-        </Grid>
-        <Grid item xs={4}>
-          <video
-            autoPlay
-            ref={peer.remoteVideoRef}
-            style={{ width: "100%", height: "100%" }}
-          />
-        </Grid>
-        <Grid item xs={4}>
-          <video
-            autoPlay
-            ref={peer.anotherVideoRef}
-            style={{ width: "100%", height: "100%" }}
-          />
-        </Grid>
+        {peer.joinedUsers.map((user) => (
+          <Grid key={user.name} item xs={columnSize}>
+            <video
+              autoPlay
+              ref={peer.handleAddVideoRef}
+              style={{ width: "100%", height: "100%" }}
+            />
+          </Grid>
+        ))}
         <Grid item xs={12} container spacing={2} justify="center">
           <Grid item xs="auto">
             <IconButton onClick={peer.handleToggleDevicesMuteStatus("video")}>
