@@ -1,7 +1,7 @@
 {
   "files": {
-    "main.js": "/webrtc/static/js/main.e447b5d2.chunk.js",
-    "main.js.map": "/webrtc/static/js/main.e447b5d2.chunk.js.map",
+    "main.js": "/webrtc/static/js/main.c5f71d83.chunk.js",
+    "main.js.map": "/webrtc/static/js/main.c5f71d83.chunk.js.map",
     "runtime-main.js": "/webrtc/static/js/runtime-main.aaae6fb7.js",
     "runtime-main.js.map": "/webrtc/static/js/runtime-main.aaae6fb7.js.map",
     "static/js/2.4a32625d.chunk.js": "/webrtc/static/js/2.4a32625d.chunk.js",
@@ -14,6 +14,6 @@
   "entrypoints": [
     "static/js/runtime-main.aaae6fb7.js",
     "static/js/2.4a32625d.chunk.js",
-    "static/js/main.e447b5d2.chunk.js"
+    "static/js/main.c5f71d83.chunk.js"
   ]
 }
